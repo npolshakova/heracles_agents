@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+# LLM failover with eviction: evict providers on 5xx so the next request tries the fallback group.
+binds:
+- port: 3000
+  listeners:
+  - name: llm-failover
+    protocol: HTTP
+    routes:
+    - backends:
+      - ai:
+          groups:
+          # Priority 0 – primary: try OpenAI first
+          - providers:
+            - name: openai
+              provider:
+                openAI:
+                  model: gpt-4
+          # Priority 1 – fallback: local Llama via Ollama
+          - providers:
+            - name: llama
+              hostOverride: "localhost:11434"
+              pathOverride: /v1/chat/completions
+              provider:
+                openAI:
+                  model: llama3.2
+      policies:
+        backendAuth:
+          key: "${OPENAI_API_KEY}"
+        # Evict provider on 5xx for 30s so failover can try the next group
+        eviction:
+          unhealthyExpression: "response.code >= 500"
+          evictionDuration: 30s
