@@ -38,6 +38,10 @@ class MyTextArea(TextArea):
 
 
 class InputDisplayApp(App):
+    BINDINGS = [
+        Binding("ctrl+x", "quit", "Quit"),
+    ]
+
     def __init__(self, agent):
         self.agent = agent
         self.messages = generate_initial_prompt(agent).to_openai_json(
@@ -73,7 +77,10 @@ class InputDisplayApp(App):
     def action_submit(self) -> None:
         """Called when ctrl+b is pressed."""
         input_text_box = self.query_one("#text_area", MyTextArea)
-        input_text = input_text_box.text
+        input_text = input_text_box.text.strip()
+        if input_text.lower() in ("exit", "/exit", "quit", "/quit"):
+            self.exit()
+            return
         text_log = self.query_one(RichLog)
         formatted_text = f"[bold black on white]User:[/] {input_text}"
         text_log.write(formatted_text)
