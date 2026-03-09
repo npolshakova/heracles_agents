@@ -1,5 +1,16 @@
 # yaml-language-server: $schema=https://agentgateway.dev/schema/config
-# LLM failover with eviction: evict providers on 5xx so the next request tries the fallback group.
+# LLM failover (OpenAI → Ollama) with OTel tracing (no access-log export).
+# All chatdsg tool and provider calls go through this gateway.
+frontendPolicies:
+  tracing:
+    host: localhost:4317
+    protocol: grpc
+    randomSampling: "1.0"
+    attributes:
+      environment: '"production"'
+      route: request.path
+    resources:
+      service.name: '"agentgateway"'
 binds:
 - port: 3000
   listeners:
@@ -9,15 +20,15 @@ binds:
     - backends:
       - ai:
           groups:
-          # Priority 0 – primary: try OpenAI first
+          # Priority 0 – primary: OpenAI
           - providers:
             - name: openai
               provider:
                 openAI:
-                  model: gpt-4
-          # Priority 1 – fallback: local llama3 via Ollama
+                  model: gpt-4.1
+          # Priority 1 – fallback: local Ollama
           - providers:
-            - name: llama3.1
+            - name: ollama
               hostOverride: "localhost:11434"
               pathOverride: /v1/responses
               provider:
@@ -27,12 +38,10 @@ binds:
           health:
             unhealthyExpression: "response.code >= 500"
             eviction:
-               duration: 30s
+              duration: 30s
       policies:
         backendAuth:
           key: "${OPENAI_API_KEY}"
-        # Evict provider on 5xx for 30s so failover can try the next group
-        # Route by path: Completions API vs Responses API vs passthrough
         ai:
           routes:
             "/v1/chat/completions": completions

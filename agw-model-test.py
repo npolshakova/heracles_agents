@@ -47,10 +47,9 @@ AGW_GATEWAY = "http://localhost:3000/v1"
 MODELS = [
     {"name": "gpt-4.1",          "model": "gpt-4.1",                                  "provider": "openai"},
     {"name": "claude-sonnet-4",  "model": "claude-sonnet-4-20250514",                  "provider": "anthropic"},
-    {"name": "llama3.1",         "model": "llama3.1",                                  "provider": "ollama"},
-    # Uncomment when fixed
-    # {"name": "gemini-2.5-flash", "model": "gemini-2.5-flash",                          "provider": "gemini"},
-    {"name": "bedrock-claude",   "model": "anthropic.claude-3-5-sonnet-20241022-v2:0", "provider": "bedrock"},
+    {"name": "qwen2.5:14b",         "model": "qwen2.5:14b",                                  "provider": "ollama"},
+    # {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite",                          "provider": "gemini"},
+    {"name": "bedrock-claude-haiku",   "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
 ]
 
 DEFAULT_QUESTIONS = {
@@ -79,8 +78,8 @@ def load_scene_graph(dsg_path, neo4j_uri, object_labelspace, room_labelspace):
     scene_graph = spark_dsg.DynamicSceneGraph.load(dsg_path)
     summarize_dsg(scene_graph)
     neo4j_creds = (
-        os.getenv("HERACLES_NEO4J_USERNAME"),
-        os.getenv("HERACLES_NEO4J_PASSWORD"),
+        os.getenv("HERACLES_NEO4J_USERNAME", "neo4j"),
+        os.getenv("HERACLES_NEO4J_PASSWORD", "neo4j"),
     )
     load_dsg_to_db(
         object_labelspace,

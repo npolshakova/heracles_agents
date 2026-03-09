@@ -1,5 +1,4 @@
-# yaml-language-server: $schema=https://agentgateway.dev/schema/config
-# Agent Gateway config for multi-model testing.
+# agentgateway config for multi-model testing.
 #
 # Single port, header-based routing: the client sets x-model-provider
 # to pick which backend handles the request.
@@ -61,27 +60,6 @@ binds:
             "/v1/chat/completions": completions
             "*": passthrough
 
-    - name: gemini-route
-      matches:
-      - path:
-          pathPrefix: "/"
-        headers:
-        - name: "x-model-provider"
-          value:
-            exact: "gemini"
-      backends:
-      - ai:
-          name: gemini
-          provider:
-            gemini: {}
-      policies:
-        backendAuth:
-          key: "$GEMINI_API_KEY"
-        ai:
-          routes:
-            "/v1/chat/completions": completions
-            "*": passthrough
-
     - name: bedrock-route
       matches:
       - path:
@@ -116,7 +94,7 @@ binds:
           hostOverride: "localhost:11434"
           provider:
             openAI:
-              model: llama3.1
+              model: qwen2.5:14b
       policies:
         ai:
           routes:
