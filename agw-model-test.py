@@ -11,7 +11,7 @@ client type uses /v1/chat/completions, which agentgateway supports for every
 provider (OpenAI native, Anthropic translation, Gemini native, Ollama native).
 
 Prerequisites:
-  - Agent Gateway running: agentgateway -f agw-model-test-config.yaml
+  - Agent Gateway running: agentgateway -f config.yaml
   - Neo4j running with the scene graph loaded
   - Environment variables:
       OPENAI_API_KEY           — for agentgateway backend auth
@@ -38,9 +38,17 @@ from heracles_agents.llm_interface import AgentContext, EvalQuestion
 from heracles_agents.pipelines.agentic_pipeline import generate_prompt
 from heracles_agents.pipelines.comparisons import evaluate_answer
 
-AGENTS_PATH = os.environ.get(
-    "HERACLES_AGENTS_PATH", os.path.dirname(os.path.abspath(__file__))
-)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+AGENTS_PATH = os.environ.get("HERACLES_AGENTS_PATH", _SCRIPT_DIR)
+
+if not os.path.isdir(os.path.join(AGENTS_PATH, "examples", "chatdsg")):
+    logging.warning(
+        "HERACLES_AGENTS_PATH=%s does not contain examples/chatdsg; "
+        "falling back to script directory %s",
+        AGENTS_PATH,
+        _SCRIPT_DIR,
+    )
+    AGENTS_PATH = _SCRIPT_DIR
 
 AGW_GATEWAY = "http://localhost:3000/v1"
 
@@ -49,7 +57,7 @@ MODELS = [
     {"name": "claude-sonnet-4",  "model": "claude-sonnet-4-20250514",                  "provider": "anthropic"},
     {"name": "qwen2.5:14b",         "model": "qwen2.5:14b",                                  "provider": "ollama"},
     # {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite",                          "provider": "gemini"},
-    {"name": "bedrock-claude-haiku",   "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
+    # {"name": "bedrock-claude-haiku",   "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
 ]
 
 DEFAULT_QUESTIONS = {

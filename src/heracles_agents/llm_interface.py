@@ -1,6 +1,7 @@
 # ruff: noqa: F811
 import logging
 import time
+import traceback
 from typing import Literal, Optional, Union
 
 import boto3
@@ -274,17 +275,19 @@ class AgentContext:
 
     def call_llm(self, history):
         model_info = self.agent.model_info
+        logger.info(
+            "Calling LLM model=%s history_len=%d", model_info.model, len(history)
+        )
         logger.debug(f"Calling llm with history: {history}")
 
         explicit_tools = generate_tools_for_agent(self.agent.agent_info)
 
-        # TODO: what's a reasonable way to set the response format in general?
-        # Needs to align with prompt, most likely
         response_format = "text"
 
         n_ratelimit_retries = 5
         wait_time_s = 60
         for idx in range(n_ratelimit_retries):
+            t0 = time.perf_counter()
             try:
                 response = self.agent.client.call(
                     model_info, explicit_tools, response_format, history
@@ -339,9 +342,11 @@ class AgentContext:
                 continue
 
             break
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        logger.info("LLM responded in %.0f ms", elapsed_ms)
         return response
 
-    def handle_response(self, response):
+    def handle_response(self, response, on_tool_start=None, on_tool_end=None):
         executed_tool_calls = []
         logger.debug(f"Handling response: {response}")
         for message in iterate_messages(self.agent, response):
@@ -355,7 +360,23 @@ class AgentContext:
 
             self.n_tool_calls += 1
 
-            result = call_function(self.agent, message)
+            func_name = getattr(message, "name", "unknown")
+            func_args = getattr(message, "arguments", "")
+            logger.info("Executing tool call #%d: %s", self.n_tool_calls, func_name)
+            if on_tool_start:
+                on_tool_start(self.n_tool_calls, func_name, func_args)
+            t0 = time.perf_counter()
+            try:
+                result = call_function(self.agent, message)
+            except Exception:
+                logger.error(
+                    "Tool call %s failed:\n%s", func_name, traceback.format_exc()
+                )
+                raise
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            logger.info("Tool call %s completed in %.0f ms", func_name, elapsed_ms)
+            if on_tool_end:
+                on_tool_end(self.n_tool_calls, func_name, elapsed_ms, result)
             logger.debug(f"function_result: {result}")
             tool_response = make_tool_response(self.agent, message, result)
             logger.debug(f"Tool response: {result}")

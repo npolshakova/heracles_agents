@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import threading
+import time
 
 import spark_dsg
 import yaml
@@ -94,20 +95,69 @@ class InputDisplayApp(App):
         cxt.history = self.messages
 
         def run_agent():
-            success, answer = cxt.run()
-            responses = cxt.get_agent_responses()
-            for r in responses[initial_length:]:
-                text_log.write(r.parsed_response)
-                text_log.write("")
+            history_cursor = initial_length
+            max_iter = self.agent.agent_info.max_iterations
 
-        thread = threading.Thread(target=run_agent)
+            def on_tool_start(n, name, args):
+                preview = (args[:80] + "...") if len(args) > 80 else args
+                text_log.write(
+                    f"[dim]  Tool #{n} [bold]{name}[/bold]({preview}) running...[/]"
+                )
+
+            def on_tool_end(n, name, elapsed_ms, result):
+                preview = str(result)[:120]
+                text_log.write(
+                    f"[dim]  Tool #{n} {name} done in {elapsed_ms:.0f} ms → {preview}[/]"
+                )
+
+            for i in range(max_iter):
+                text_log.write(
+                    f"[dim]Step {i + 1}/{max_iter}: calling LLM...[/]"
+                )
+                t0 = time.perf_counter()
+                try:
+                    response = cxt.call_llm(cxt.history)
+                except Exception as exc:
+                    text_log.write(f"[bold red]LLM call failed:[/] {exc}")
+                    logger.exception("LLM call failed")
+                    return
+
+                llm_ms = (time.perf_counter() - t0) * 1000
+                text_log.write(f"[dim]  LLM responded in {llm_ms:.0f} ms[/]")
+
+                try:
+                    update = cxt.handle_response(
+                        response,
+                        on_tool_start=on_tool_start,
+                        on_tool_end=on_tool_end,
+                    )
+                except Exception as exc:
+                    text_log.write(f"[bold red]Tool call failed:[/] {exc}")
+                    logger.exception("Tool call failed")
+                    return
+
+                cxt.update_history(response)
+                cxt.update_history(update)
+
+                done = cxt.check_if_done(cxt.history, response, update)
+
+                responses = cxt.get_agent_responses()
+                for r in responses[history_cursor:]:
+                    if r.parsed_response:
+                        text_log.write(r.parsed_response)
+                        text_log.write("")
+                history_cursor = len(cxt.history)
+
+                if done:
+                    text_log.write("[dim]Agent finished.[/]")
+                    break
+            else:
+                text_log.write(
+                    f"[dim yellow]Agent hit max iterations ({max_iter}).[/]"
+                )
+
+        thread = threading.Thread(target=run_agent, daemon=True)
         thread.start()
-
-        # success, answer = cxt.run()
-        # responses = cxt.get_agent_responses()
-        # for r in responses[initial_length:]:
-        #    text_log.write(r.parsed_response)
-        #    text_log.write("")
 
 
 if __name__ == "__main__":
@@ -133,7 +183,27 @@ if __name__ == "__main__":
     )
     parser.add_argument("--db_ip", type=str, help="Heracles database ip")
     parser.add_argument("--db_port", type=int, help="Heracles database ip")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable DEBUG logging to chatdsg_debug.log",
+    )
     args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
+            filename="chatdsg_debug.log",
+            filemode="w",
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(name)s [%(levelname)s] %(message)s",
+            filename="chatdsg_debug.log",
+            filemode="w",
+        )
 
     if args.db_ip is None:
         args.db_ip = os.getenv("ADT4_HERACLES_IP")
