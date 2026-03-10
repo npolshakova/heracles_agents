@@ -260,11 +260,88 @@
           "instant": true
         }
       ]
+    },
+    {
+      "title": "Neo4j Tool-Call Rate by Backend",
+      "description": "HTTP requests through the gateway to Neo4j. During failover the in-cluster line drops and the local Docker line rises.",
+      "type": "timeseries",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false
+          },
+          "unit": "cps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "rate(agentgateway_requests_total{listener=\"neo4j-proxy\",backend=~\".*backend0\"}[30s])",
+          "legendFormat": "In-cluster Neo4j ({{status}})",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(agentgateway_requests_total{listener=\"neo4j-proxy\",backend=~\".*backend1\"}[30s])",
+          "legendFormat": "Local Docker Neo4j ({{status}})",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Neo4j Total Connections by Backend",
+      "description": "Cumulative count of Neo4j HTTP requests routed to each backend since gateway start.",
+      "type": "bargauge",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 35 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "blue", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "expr": "agentgateway_requests_total{listener=\"neo4j-proxy\",backend=~\".*backend0\"}",
+          "legendFormat": "In-cluster Neo4j",
+          "refId": "A",
+          "instant": true
+        },
+        {
+          "expr": "agentgateway_requests_total{listener=\"neo4j-proxy\",backend=~\".*backend1\"}",
+          "legendFormat": "Local Docker Neo4j",
+          "refId": "B",
+          "instant": true
+        }
+      ]
     }
   ],
   "refresh": "5s",
   "schemaVersion": 39,
-  "tags": ["agentgateway", "failover", "cost"],
+  "tags": ["agentgateway", "failover", "cost", "neo4j"],
   "templating": { "list": [] },
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},

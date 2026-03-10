@@ -15,3 +15,9 @@ nodes:
   - containerPort: 30301
     hostPort: 3001
     protocol: TCP
+  - containerPort: 30787
+    hostPort: 17687
+    protocol: TCP
+  - containerPort: 30747
+    hostPort: 17474
+    protocol: TCP

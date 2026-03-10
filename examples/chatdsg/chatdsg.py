@@ -206,10 +206,10 @@ if __name__ == "__main__":
         )
 
     if args.db_ip is None:
-        args.db_ip = os.getenv("ADT4_HERACLES_IP")
+        args.db_ip = os.getenv("ADT4_HERACLES_IP", "localhost")
 
     if args.db_port is None:
-        args.db_port = os.getenv("ADT4_HERACLES_PORT")
+        args.db_port = os.getenv("ADT4_HERACLES_PORT", "17687")
 
     if args.scene_graph:
         dsg_filepath = args.scene_graph
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 
         scene_graph = spark_dsg.DynamicSceneGraph.load(dsg_filepath)
         summarize_dsg(scene_graph)
-        neo4j_uri = f"neo4j://{args.db_ip}:{args.db_port}"
+        neo4j_uri = f"bolt://{args.db_ip}:{int(args.db_port)}"
         neo4j_creds = (
             os.getenv("HERACLES_NEO4J_USERNAME"),
             os.getenv("HERACLES_NEO4J_PASSWORD"),

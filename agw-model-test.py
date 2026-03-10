@@ -249,7 +249,12 @@ def main():
         "--db-port",
         type=int,
         default=None,
-        help="Neo4j port (default: $ADT4_HERACLES_PORT or 7687)",
+        help="Neo4j bolt port for scene graph loading (default: $ADT4_HERACLES_PORT or 17687)",
+    )
+    parser.add_argument(
+        "--neo4j-tool-url",
+        default="http://localhost:4000",
+        help="Neo4j HTTP URL for agent tool calls through the gateway (default: %(default)s)",
     )
     parser.add_argument(
         "--verbose",
@@ -265,12 +270,13 @@ def main():
         logging.basicConfig(level=logging.WARNING)
 
     db_ip = args.db_ip or os.getenv("ADT4_HERACLES_IP", "localhost")
-    db_port = args.db_port or int(os.getenv("ADT4_HERACLES_PORT", "7687"))
-    neo4j_uri = f"neo4j://{db_ip}:{db_port}"
+    db_port = args.db_port or int(os.getenv("ADT4_HERACLES_PORT", "17687"))
+    bolt_uri = f"bolt://{db_ip}:{db_port}"
+    neo4j_uri = args.neo4j_tool_url
 
     if args.scene_graph:
         load_scene_graph(
-            args.scene_graph, neo4j_uri,
+            args.scene_graph, bolt_uri,
             args.object_labelspace, args.room_labelspace,
         )
 
