@@ -6,7 +6,7 @@ Runs the full heracles agent pipeline (system prompt, Cypher tools, agent loop)
 for each model through agentgateway using the Chat Completions API, then prints
 a comparison table.
 
-All providers sit behind a single gateway port.  The new openai_completions
+All providers sit behind a single gateway port.  The openai_completions
 client type uses /v1/chat/completions, which agentgateway supports for every
 provider (OpenAI native, Anthropic translation, Gemini native, Ollama native).
 
@@ -23,26 +23,45 @@ Prerequisites:
 import argparse
 import logging
 import os
-import textwrap
+import sys
 import time
 
 import spark_dsg
 import yaml
 from heracles.dsg_utils import summarize_dsg
 from heracles.utils import load_dsg_to_db
+from rich.logging import RichHandler
+from rich.progress import track
+from rich.table import Table
+from rich.console import Console
 
-# Ensure the completions agent integration dispatchers are registered
 import heracles_agents.provider_integrations.openai.openai_completions_agent_integration  # noqa: F401
 from heracles_agents.llm_agent import LlmAgent
 from heracles_agents.llm_interface import AgentContext, EvalQuestion
 from heracles_agents.pipelines.agentic_pipeline import generate_prompt
 from heracles_agents.pipelines.comparisons import evaluate_answer
 
+logging.basicConfig(level="INFO", handlers=[RichHandler(level="INFO")])
+logger = logging.getLogger(__name__)
+
+console = Console()
+
+# Model x Question-type sweep table
+#
+# +---------------------+---------+---------+
+# |                     |   Q&A   |  PDDL   |
+# |     Model           | Correct | Correct |
+# +---------------------+---------+---------+
+# | gpt-4.1             |    ?    |    ?    |
+# | claude-sonnet-4     |    ?    |    ?    |
+# | qwen2.5:14b         |    ?    |    ?    |
+# +---------------------+---------+---------+
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 AGENTS_PATH = os.environ.get("HERACLES_AGENTS_PATH", _SCRIPT_DIR)
 
 if not os.path.isdir(os.path.join(AGENTS_PATH, "examples", "chatdsg")):
-    logging.warning(
+    logger.warning(
         "HERACLES_AGENTS_PATH=%s does not contain examples/chatdsg; "
         "falling back to script directory %s",
         AGENTS_PATH,
@@ -53,11 +72,11 @@ if not os.path.isdir(os.path.join(AGENTS_PATH, "examples", "chatdsg")):
 AGW_GATEWAY = "http://localhost:3000/v1"
 
 MODELS = [
-    {"name": "gpt-4.1",          "model": "gpt-4.1",                                  "provider": "openai"},
-    {"name": "claude-sonnet-4",  "model": "claude-sonnet-4-20250514",                  "provider": "anthropic"},
-    {"name": "qwen2.5:14b",         "model": "qwen2.5:14b",                                  "provider": "ollama"},
-    # {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite",                          "provider": "gemini"},
-    # {"name": "bedrock-claude-haiku",   "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
+    {"name": "gpt-4.1", "model": "gpt-4.1", "provider": "openai"},
+    {"name": "claude-sonnet-4", "model": "claude-sonnet-4-20250514", "provider": "anthropic"},
+    {"name": "qwen2.5:14b", "model": "qwen2.5:14b", "provider": "ollama"},
+    # {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite", "provider": "gemini"},
+    # {"name": "bedrock-claude-haiku", "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
 ]
 
 DEFAULT_QUESTIONS = {
@@ -82,7 +101,7 @@ def find_question(questions, uid):
 
 def load_scene_graph(dsg_path, neo4j_uri, object_labelspace, room_labelspace):
     """Load a scene graph file into Neo4j (mirrors chatdsg.py behaviour)."""
-    print(f"  Loading scene graph from {dsg_path} ...")
+    logger.info(f"Loading scene graph from {dsg_path} ...")
     scene_graph = spark_dsg.DynamicSceneGraph.load(dsg_path)
     summarize_dsg(scene_graph)
     neo4j_creds = (
@@ -96,7 +115,7 @@ def load_scene_graph(dsg_path, neo4j_uri, object_labelspace, room_labelspace):
         neo4j_creds,
         scene_graph,
     )
-    print("  Scene graph loaded!\n")
+    logger.info("Scene graph loaded!")
 
 
 def make_agent_config(model_name, provider, gateway_url, neo4j_uri):
@@ -170,35 +189,54 @@ def run_agent_for_question(model_cfg, question_dict, gateway_url, neo4j_uri):
         )
 
     except Exception as e:
-        logging.exception("Agent error")
+        logger.exception("Agent error")
         return None, False, 0, 0.0, str(e)
 
 
-def print_table(rows, col_widths, headers):
-    def sep():
-        return "+" + "+".join("-" * (w + 2) for w in col_widths) + "+"
+def build_results_table(title, rows):
+    """Build a rich Table from result rows."""
+    table = Table(title=title, show_lines=True)
+    table.add_column("Model", justify="center", min_width=20)
+    table.add_column("Answer", justify="center", min_width=40)
+    table.add_column("Correct?", justify="center", min_width=9)
+    table.add_column("Tools", justify="center", min_width=7)
+    table.add_column("Time", justify="center", min_width=8)
 
-    def fmt_row(cells):
-        parts = []
-        for cell, w in zip(cells, col_widths):
-            lines = textwrap.wrap(str(cell), width=w) or [""]
-            parts.append(lines)
-        max_lines = max(len(p) for p in parts)
-        output = []
-        for i in range(max_lines):
-            row_parts = []
-            for p, w in zip(parts, col_widths):
-                line = p[i] if i < len(p) else ""
-                row_parts.append(f" {line:<{w}} ")
-            output.append("|" + "|".join(row_parts) + "|")
-        return "\n".join(output)
-
-    print(sep())
-    print(fmt_row(headers))
-    print(sep())
     for row in rows:
-        print(fmt_row(row))
-        print(sep())
+        style = "green" if row[2] == "YES" else ("red" if row[2] == "no" else "dim")
+        table.add_row(*row, style=style)
+
+    return table
+
+
+def get_questions(script_dir):
+    qa_path = os.path.join(script_dir, "examples", "questions", "qa_questions.yaml")
+    pddl_path = os.path.join(script_dir, "examples", "questions", "pddl_questions.yaml")
+    return load_questions(qa_path), load_questions(pddl_path)
+
+
+def get_test_cases(question_type, qa_questions, pddl_questions):
+    test_cases = []
+    if question_type in ("qa", "both"):
+        q = find_question(qa_questions, DEFAULT_QUESTIONS["qa"])
+        if q:
+            test_cases.append(("QA", q))
+    if question_type in ("pddl", "both"):
+        q = find_question(pddl_questions, DEFAULT_QUESTIONS["pddl"])
+        if q:
+            test_cases.append(("PDDL", q))
+    return test_cases
+
+
+def select_models(names):
+    model_index = {m["name"]: m for m in MODELS}
+    selected = []
+    for name in names:
+        if name not in model_index:
+            logger.error(f"Unknown model '{name}'. Choose from: {list(model_index.keys())}")
+            sys.exit(1)
+        selected.append(model_index[name])
+    return selected
 
 
 def main():
@@ -260,9 +298,7 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig(level=logging.WARNING)
+        logging.getLogger().setLevel(logging.DEBUG)
 
     db_ip = args.db_ip or os.getenv("ADT4_HERACLES_IP", "localhost")
     db_port = args.db_port or int(os.getenv("ADT4_HERACLES_PORT", "7687"))
@@ -274,66 +310,41 @@ def main():
             args.object_labelspace, args.room_labelspace,
         )
 
-    model_index = {m["name"]: m for m in MODELS}
-    selected = []
-    for name in args.models:
-        if name not in model_index:
-            parser.error(
-                f"Unknown model '{name}'. Choose from: {', '.join(all_model_names)}"
-            )
-        selected.append(model_index[name])
+    selected = select_models(args.models)
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    qa_path = os.path.join(script_dir, "examples", "questions", "qa_questions.yaml")
-    pddl_path = os.path.join(
-        script_dir, "examples", "questions", "pddl_questions.yaml"
-    )
-
-    qa_questions = load_questions(qa_path)
-    pddl_questions = load_questions(pddl_path)
-
-    test_cases = []
-    if args.question_type in ("qa", "both"):
-        q = find_question(qa_questions, DEFAULT_QUESTIONS["qa"])
-        if q:
-            test_cases.append(("QA", q))
-    if args.question_type in ("pddl", "both"):
-        q = find_question(pddl_questions, DEFAULT_QUESTIONS["pddl"])
-        if q:
-            test_cases.append(("PDDL", q))
+    qa_questions, pddl_questions = get_questions(script_dir)
+    test_cases = get_test_cases(args.question_type, qa_questions, pddl_questions)
 
     if not test_cases:
-        print("No matching questions found.")
+        logger.warning("No matching questions found.")
         return
 
-    col_widths = [18, 40, 9, 7, 8]
-    headers = ["Model", "Answer", "Correct?", "Tools", "Time"]
-
     for q_type, question in test_cases:
-        print(f"\n{'=' * 90}")
-        print(f"  [{q_type}] uid={question['uid']}  {question['name']}")
-        print(f"  Q: {question['question']}")
-        print(f"  Expected: {question['solution']}")
-        print(f"{'=' * 90}\n")
+        logger.info(
+            f"[{q_type}] uid={question['uid']}  {question['name']}\n"
+            f"  Q: {question['question']}\n"
+            f"  Expected: {question['solution']}"
+        )
 
         rows = []
-        for model_cfg in selected:
-            print(f"  Running {model_cfg['name']} ...", flush=True)
+        for model_cfg in track(selected, description=f"Running {q_type} models..."):
+            logger.info(f"Running {model_cfg['name']} ...")
             answer, correct, n_tools, elapsed, error = run_agent_for_question(
                 model_cfg, question, args.gateway_url, neo4j_uri
             )
 
             if error:
-                print(f"    ERROR: {error[:80]}")
+                logger.error(f"{model_cfg['name']}: {error[:80]}")
                 rows.append(
                     [model_cfg["name"], f"ERROR: {error[:36]}", "--", "--", "--"]
                 )
             else:
                 mark = "YES" if correct else "no"
                 truncated = answer if len(answer) <= 40 else answer[:37] + "..."
-                print(
-                    f"    Answer: {truncated}  Correct: {mark}  "
-                    f"Tools: {n_tools}  Time: {elapsed:.1f}s"
+                logger.info(
+                    f"{model_cfg['name']}: {truncated}  "
+                    f"Correct={mark}  Tools={n_tools}  Time={elapsed:.1f}s"
                 )
                 rows.append([
                     model_cfg["name"],
@@ -343,9 +354,11 @@ def main():
                     f"{elapsed:.1f}s",
                 ])
 
-        print()
-        print_table(rows, col_widths, headers)
-        print()
+        title = f"[{q_type}] uid={question['uid']}  {question['name']}"
+        table = build_results_table(title, rows)
+        console.print()
+        console.print(table)
+        console.print()
 
 
 if __name__ == "__main__":

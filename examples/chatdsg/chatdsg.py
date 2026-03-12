@@ -5,6 +5,7 @@ import os
 import threading
 import time
 
+import openai
 import spark_dsg
 import yaml
 from heracles.dsg_utils import summarize_dsg
@@ -117,6 +118,12 @@ class InputDisplayApp(App):
                 t0 = time.perf_counter()
                 try:
                     response = cxt.call_llm(cxt.history)
+                except openai.PermissionDeniedError as exc:
+                    text_log.write(
+                        f"[bold red]Request blocked by guardrails (HTTP {exc.status_code}):[/] {exc.message}"
+                    )
+                    logger.warning("Guardrail block: %s", exc)
+                    return
                 except Exception as exc:
                     text_log.write(f"[bold red]LLM call failed:[/] {exc}")
                     logger.exception("LLM call failed")

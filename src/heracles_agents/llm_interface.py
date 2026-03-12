@@ -332,6 +332,9 @@ class AgentContext:
                 )
                 time.sleep(wait_time_s)
                 continue
+            except openai.PermissionDeniedError:
+                raise
+
             except openai.APIStatusError as ex:
                 # TODO: each client should catch their own rate limit errors and then emit a shared single error type that we catch here
                 print(ex)
