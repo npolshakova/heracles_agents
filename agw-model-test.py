@@ -75,7 +75,9 @@ MODELS = [
     {"name": "gpt-4.1", "model": "gpt-4.1", "provider": "openai"},
     {"name": "claude-sonnet-4", "model": "claude-sonnet-4-20250514", "provider": "anthropic"},
     {"name": "qwen2.5:14b", "model": "qwen2.5:14b", "provider": "ollama"},
-    # {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite", "provider": "gemini"},
+    # make sure to run "gcloud auth application-default login"
+    {"name": "gemini-2.5-flash-lite", "model": "gemini-2.5-flash-lite", "provider": "gemini"},
+    # make sure to run "aws configure"
     # {"name": "bedrock-claude-haiku", "model": "us.anthropic.claude-3-5-haiku-20241022-v1:0", "provider": "bedrock"},
 ]
 
