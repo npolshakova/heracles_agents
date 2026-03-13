@@ -9,7 +9,7 @@ class OpenaiClientConfig(BaseSettings):
     client_type: Literal["openai"]
     timeout: int
     auth_key: SecretStr = Field(alias="HERACLES_OPENAI_API_KEY", exclude=True)
-    base_url: Optional[str] = None  # e.g. http://localhost:3000/v1 for Agent Gateway proxy
+    base_url: Optional[str] = None  # e.g. http://localhost:3000/v1 for agentgateway proxy
     _client: object = PrivateAttr()
 
     def __init__(self, **data):

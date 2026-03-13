@@ -11,7 +11,7 @@ client type uses /v1/chat/completions, which agentgateway supports for every
 provider (OpenAI native, Anthropic translation, Gemini native, Ollama native).
 
 Prerequisites:
-  - Agent Gateway running: agentgateway -f config.yaml
+  - agentgateway running: agentgateway -f config.yaml
   - Neo4j running with the scene graph loaded
   - Environment variables:
       OPENAI_API_KEY           — for agentgateway backend auth
@@ -250,7 +250,7 @@ def main():
     parser.add_argument(
         "--gateway-url",
         default=AGW_GATEWAY,
-        help="Agent Gateway base URL (default: %(default)s)",
+        help="agentgateway base URL (default: %(default)s)",
     )
     parser.add_argument(
         "--models",

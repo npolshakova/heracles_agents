@@ -269,7 +269,7 @@
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Agent Gateway - Failover Dashboard",
+  "title": "agentgateway - Failover Dashboard",
   "uid": "agw-failover",
   "version": 1
 }
